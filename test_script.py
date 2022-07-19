@@ -78,8 +78,8 @@ def main(args):
             permutation_mode=args.permutation_mode
         )
 
-    clip_model, _ = clip.load(args.architecture, device='cpu')
-    retrieval_clip.clip_model = clip_model
+    # clip_model, _ = clip.load(args.architecture, device='cpu')
+    # retrieval_clip.clip_model = clip_model
 
     test_trainer = pl.Trainer(
         accelerator='gpu',
