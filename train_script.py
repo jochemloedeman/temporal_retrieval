@@ -2,11 +2,12 @@ import argparse
 import sys
 import pytorch_lightning as pl
 from pathlib import Path
+from clip import clip
 from pytorch_lightning import seed_everything
 
 sys.path.append(str(Path(__file__).parent.parent / 'thesislib'))
 from thesislib.datamodules import MSRVTTDataModule
-from thesislib.models import RetrievalCLIP
+from thesislib.models import RetrievalCLIP, TemporalCLIP
 
 datamodules = {
     'msrvtt': MSRVTTDataModule,
@@ -60,29 +61,49 @@ def main(args):
     else:
         tca_settings = None
 
+    retrieval_clip = RetrievalCLIP(
+        clip_architecture=args.architecture,
+        nr_pred_frames=args.nr_pred_frames,
+        nr_context_frames=args.nr_context_frames,
+        tca_settings=tca_settings,
+        vca_settings=vca_settings,
+        optimizer=args.optimizer,
+        permutation_mode=args.permutation_mode
+    )
+
     if args.from_checkpoint:
-        retrieval_clip = RetrievalCLIP.load_from_checkpoint(
+        pretrained_model = TemporalCLIP.load_from_checkpoint(
             Path(__file__).parent / 'checkpoints' / args.ckpt_file_name
         )
+        retrieval_clip.visual_context_addition = pretrained_model.visual_context_addition
+        retrieval_clip.textual_context_addition = pretrained_model.textual_context_addition
         print(f"loaded {args.ckpt_file_name} with backbone {args.architecture}\n")
-    else:
-        retrieval_clip = RetrievalCLIP(
-            clip_architecture=args.architecture,
-            nr_pred_frames=args.nr_pred_frames,
-            nr_context_frames=args.nr_context_frames,
-            tca_settings=tca_settings,
-            vca_settings=vca_settings,
-            optimizer=args.optimizer,
-            permutation_mode=args.permutation_mode
-        )
 
-    test_trainer = pl.Trainer(
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        monitor='val_loss',
+        filename='{epoch}-{step}-{val_loss:.2f}',
+        save_last=True,
+        mode='min',
+        auto_insert_metric_name=True,
+        save_top_k=5)
+
+    lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval='epoch')
+
+    trainer = pl.Trainer(
         accelerator='gpu',
         devices=1,
         precision=args.precision,
+        callbacks=[checkpoint_callback, lr_monitor],
+        track_grad_norm=2,
+        strategy=args.strategy,
+        max_epochs=args.epochs,
+        profiler='simple' if args.profiler else None,
+        fast_dev_run=30 if args.dev_run else False,
     )
 
-    test_trainer.test(
+    trainer.logger.log_hyperparams(args)
+
+    trainer.fit(
         model=retrieval_clip,
         datamodule=datamodule,
     )
@@ -98,14 +119,14 @@ if __name__ == '__main__':
                         default='video_6_1_adam.ckpt',
                         type=str)
     parser.add_argument('--architecture', default='ViT-B/32', type=str)
-    parser.add_argument('--train_batch_size', default=2, type=int)
-    parser.add_argument('--val_batch_size', default=2, type=int)
+    parser.add_argument('--train_batch_size', default=4, type=int)
+    parser.add_argument('--val_batch_size', default=4, type=int)
     parser.add_argument('--nr_context_frames', default=9, type=int)
     parser.add_argument('--nr_pred_frames', default=1, type=int)
     parser.add_argument('--video_resolution', default=112, type=int)
     parser.add_argument('--fps', default=9, type=int)
     parser.add_argument('--precision', default=32, type=int)
-    parser.add_argument('--video_input_type', default="diff", type=str)
+    parser.add_argument('--video_input_type', default="normal", type=str)
     parser.add_argument('--vca_length', default=6, type=int)
     parser.add_argument('--vca_mode', default='video', type=str)
     parser.add_argument('--image_sample_mode', default='center', type=str)
@@ -117,6 +138,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', default=0, type=int)
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--permutation_mode', default=None, type=str)
+    parser.add_argument('--strategy', default='ddp', type=str)
 
     parser.add_argument('--from_checkpoint',
                         action=argparse.BooleanOptionalAction,
