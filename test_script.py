@@ -92,7 +92,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', default='msrvtt', type=str)
     parser.add_argument('--data_root',
-                        default='/home/jochem/Documents/ai/scriptie/data',
+                        default='/Users/jochemloedeman/Documents/scriptie/data',
                         type=str)
     parser.add_argument('--ckpt_file_name',
                         default='video_6_1_adam.ckpt',
@@ -126,9 +126,9 @@ if __name__ == '__main__':
     parser.add_argument('--profiler', action=argparse.BooleanOptionalAction,
                         default=False)
     parser.add_argument('--disable_vca', action=argparse.BooleanOptionalAction,
-                        default=True)
+                        default=False)
     parser.add_argument('--disable_tca', action=argparse.BooleanOptionalAction,
-                        default=True)
+                        default=False)
     parser.add_argument('--pretrained', action=argparse.BooleanOptionalAction,
                         default=False)
     parser.add_argument('--temporal_permutation',
